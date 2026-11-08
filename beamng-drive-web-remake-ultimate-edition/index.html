@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeamNG.drive Web Remake - Ultimate Edition</title>
+    <!-- Tailwind CSS for UI overlay -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Cannon.js for Physics Simulation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: #06080d;
+            color: #fff;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* BeamNG dark glassmorphism UI */
+        .beam-glass {
+            background: rgba(18, 24, 38, 0.82);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .beam-glass-panel {
+            background: rgba(12, 17, 28, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .beam-btn {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            transition: all 0.2s ease;
+        }
+        .beam-btn:hover {
+            filter: brightness(1.15);
+            transform: translateY(-1px);
+        }
+        .beam-btn:active {
+            transform: translateY(1px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top Navigation Bar (BeamNG Style) -->
+        <div class="flex justify-between items-center pointer-events-auto">
+            <div class="flex items-center gap-3">
+                <div class="beam-glass px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-2xl">
+                    <div class="w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
+                    <span class="font-black tracking-widest text-lg bg-gradient-to-r from-orange-400 to-amber-500 bg-clip-text text-transparent">BEAMNG<span class="text-white text-xs font-normal ml-1 px-1.5 py-0.5 bg-orange-600/30 rounded border border-orange-500/40">WEB REMAKE</span></span>
+                </div>
+                
+                <!-- Quick Menu Buttons -->
+                <div class="hidden md:flex gap-2">
+                    <button onclick="toggleMenu('vehicleMenu')" class="beam-glass px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-car text-orange-400"></i> Vehicle Config
+                    </button>
+                    <button onclick="toggleMenu('mapMenu')" class="beam-glass px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-map text-blue-400"></i> Environments
+                    </button>
+                    <button onclick="toggleMenu('spawnMenu')" class="beam-glass px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-cube text-emerald-400"></i> Prop Spawner
+                    </button>
+                </div>
+            </div>
+
+            <!-- Top Right Utilities -->
+            <div class="flex items-center gap-3">
+                <button onclick="toggleAudio()" id="audio-btn" class="beam-glass p-3 rounded-xl hover:bg-slate-800 transition text-sm text-gray-300 pointer-events-auto" title="Toggle Engine Audio">
+                    <i class="fa-solid fa-volume-high text-orange-400" id="audio-icon"></i>
+                </button>
+                <button onclick="toggleMenu('helpMenu')" class="beam-glass p-3 rounded-xl hover:bg-slate-800 transition text-sm text-gray-300 pointer-events-auto" title="Help & Controls">
+                    <i class="fa-solid fa-circle-question text-blue-400"></i>
+                </button>
+                <button onclick="resetCar()" class="beam-glass px-4 py-2.5 rounded-xl text-xs font-bold bg-red-600/30 hover:bg-red-600/50 border-red-500/40 text-red-300 transition flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> Reset Vehicle (R)
+                </button>
+            </div>
+        </div>
+
+        <!-- Center Notification Toast -->
+        <div id="notification-box" class="absolute top-24 left-1/2 -translate-x-1/2 beam-glass px-6 py-2.5 rounded-xl text-xs md:text-sm text-orange-300 shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none font-medium">
+            Notification
+        </div>
+
+        <!-- Floating Dialog Menus (Vehicle, Map, Spawner, Help) -->
+        
+        <!-- 1. Vehicle Config Menu -->
+        <div id="vehicleMenu" class="absolute top-20 left-6 beam-glass-panel w-80 p-5 rounded-2xl hidden pointer-events-auto shadow-2xl z-20">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-white/10">
+                <h3 class="font-bold text-sm tracking-wider text-orange-400 flex items-center gap-2"><i class="fa-solid fa-car-rear"></i> Vehicle Customization</h3>
+                <button onclick="toggleMenu('vehicleMenu')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="text-gray-400 block mb-1">Select Model</label>
+                    <select id="carModelSelect" onchange="changeCarModel(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-orange-500">
+                        <option value="coupe">Gavril Grand Marshal (Sport Coupe)</option>
+                        <option value="truck">D-Series Heavy Pickup</option>
+                        <option value="hatch">Civetta Bolide (Supercar)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-gray-400 block mb-1">Paint Color</label>
+                    <div class="flex gap-2">
+                        <button onclick="setCarColor(0xef4444)" class="w-8 h-8 rounded-full bg-red-500 border-2 border-white/20 hover:scale-110 transition"></button>
+                        <button onclick="setCarColor(0x3b82f6)" class="w-8 h-8 rounded-full bg-blue-500 border-2 border-white/20 hover:scale-110 transition"></button>
+                        <button onclick="setCarColor(0xf97316)" class="w-8 h-8 rounded-full bg-orange-500 border-2 border-white/20 hover:scale-110 transition"></button>
+                        <button onclick="setCarColor(0x10b981)" class="w-8 h-8 rounded-full bg-emerald-500 border-2 border-white/20 hover:scale-110 transition"></button>
+                        <button onclick="setCarColor(0x1e293b)" class="w-8 h-8 rounded-full bg-slate-800 border-2 border-white/20 hover:scale-110 transition"></button>
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-white/10">
+                    <label class="text-gray-400 block mb-1">Engine Tuning</label>
+                    <div class="flex items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                        <span>Supercharger / Power</span>
+                        <input type="range" id="enginePowerRange" min="800" max="3000" step="100" value="1600" oninput="updateEnginePower(this.value)" class="accent-orange-500 w-32">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Map Selector Menu -->
+        <div id="mapMenu" class="absolute top-20 left-6 beam-glass-panel w-80 p-5 rounded-2xl hidden pointer-events-auto shadow-2xl z-20">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-white/10">
+                <h3 class="font-bold text-sm tracking-wider text-blue-400 flex items-center gap-2"><i class="fa-solid fa-map-location-dot"></i> Test Environments</h3>
+                <button onclick="toggleMenu('mapMenu')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-2 text-xs">
+                <button onclick="loadEnvironment('gridmap')" class="w-full text-left bg-slate-900/80 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white">Gridmap Test Arena</div>
+                        <div class="text-gray-400 text-[10px]">Ramps, walls, obstacles & crash test dummies</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-500"></i>
+                </button>
+                <button onclick="loadEnvironment('stuntpark')" class="w-full text-left bg-slate-900/80 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white">Mega Stunt Park</div>
+                        <div class="text-gray-400 text-[10px]">High-speed jumps, loops & canyons</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-500"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Prop Spawner Menu -->
+        <div id="spawnMenu" class="absolute top-20 left-6 beam-glass-panel w-80 p-5 rounded-2xl hidden pointer-events-auto shadow-2xl z-20">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-white/10">
+                <h3 class="font-bold text-sm tracking-wider text-emerald-400 flex items-center gap-2"><i class="fa-solid fa-boxes-stacked"></i> Prop & Obstacle Spawner</h3>
+                <button onclick="toggleMenu('spawnMenu')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <button onclick="spawnObject('barrier')" class="bg-slate-900 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition text-center font-medium">🧱 Concrete Wall</button>
+                <button onclick="spawnObject('ramp')" class="bg-slate-900 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition text-center font-medium">📐 Stunt Ramp</button>
+                <button onclick="spawnObject('sphere')" class="bg-slate-900 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition text-center font-medium">⚽ Giant Ball</button>
+                <button onclick="spawnObject('barrel')" class="bg-slate-900 hover:bg-slate-800 p-3 rounded-xl border border-slate-700/60 transition text-center font-medium">🛢️ Steel Barrel</button>
+            </div>
+            <button onclick="clearProps()" class="w-full mt-3 bg-red-600/20 hover:bg-red-600/40 text-red-300 py-2 rounded-xl border border-red-500/30 transition text-xs font-semibold">Clear All Props</button>
+        </div>
+
+        <!-- 4. Help & Controls Menu -->
+        <div id="helpMenu" class="absolute top-20 right-6 beam-glass-panel w-80 p-5 rounded-2xl hidden pointer-events-auto shadow-2xl z-20">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-white/10">
+                <h3 class="font-bold text-sm tracking-wider text-blue-400 flex items-center gap-2"><i class="fa-solid fa-gamepad"></i> Driving & Controls</h3>
+                <button onclick="toggleMenu('helpMenu')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-2 text-xs text-gray-300">
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Throttle / Accelerate</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">W / Up</kbd></div>
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Brake / Reverse</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">S / Down</kbd></div>
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Steering</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">A / D or Left / Right</kbd></div>
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Handbrake / Drift</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">Spacebar</kbd></div>
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Reset Vehicle</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">R</kbd></div>
+                <div class="flex justify-between bg-slate-900/50 p-2 rounded-lg"><span>Change Camera View</span><kbd class="bg-slate-800 px-2 py-0.5 rounded text-orange-400 border border-slate-700">C</kbd></div>
+            </div>
+        </div>
+
+        <!-- Bottom Dashboard & HUD -->
+        <div class="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 pointer-events-auto w-full">
+            
+            <!-- Mobile Quick Buttons (Always visible on touch devices or small screens) -->
+            <div class="flex md:hidden gap-2">
+                <button onclick="toggleMenu('vehicleMenu')" class="beam-glass px-3 py-2 rounded-xl text-xs"><i class="fa-solid fa-car"></i></button>
+                <button onclick="toggleMenu('mapMenu')" class="beam-glass px-3 py-2 rounded-xl text-xs"><i class="fa-solid fa-map"></i></button>
+                <button onclick="toggleMenu('spawnMenu')" class="beam-glass px-3 py-2 rounded-xl text-xs"><i class="fa-solid fa-cube"></i></button>
+            </div>
+
+            <div class="hidden md:block beam-glass px-4 py-2.5 rounded-2xl text-xs text-gray-300">
+                <span class="text-orange-400 font-bold">Tip:</span> Press <kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-white border border-slate-700">C</kbd> to cycle camera modes (Chase, Hood, Orbit).
+            </div>
+
+            <!-- BeamNG Style Telemetry & Dashboard HUD -->
+            <div class="flex items-center gap-3">
+                <!-- Deformation / Damage Meter -->
+                <div class="beam-glass px-4 py-3 rounded-2xl text-center min-w-[110px]">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Deformation</div>
+                    <div id="damage-val" class="text-lg font-black text-amber-400">0%</div>
+                </div>
+
+                <!-- Gear Indicator -->
+                <div class="beam-glass px-4 py-3 rounded-2xl text-center min-w-[80px]">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Gear</div>
+                    <div id="gear-val" class="text-xl font-black text-orange-400">1</div>
+                </div>
+
+                <!-- Speedometer -->
+                <div class="beam-glass px-6 py-3 rounded-2xl text-center min-w-[150px]">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Velocity</div>
+                    <div class="flex items-baseline justify-center gap-1">
+                        <span id="speed-val" class="text-3xl md:text-4xl font-black text-white">0</span>
+                        <span class="text-[10px] text-orange-400 font-bold">KM/H</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Game & Engine State ---
+        let scene, camera, renderer, world;
+        let vehicle, chassisBody, wheelBodies = [], wheelMeshes = [];
+        let physicsMaterials = {};
+        let spawnables = [];
+        let carMeshGroup;
+        let currentCarType = 'coupe';
+        let currentCarColor = 0x3b82f6;
+        let maxEnginePower = 1600;
+        
+        // Soft-body deformation tracking
+        let bodyDeformableParts = [];
+        let lastVelocity = new CANNON.Vec3(0,0,0);
+        let accumulatedImpact = 0;
+        let totalDamage = 0;
+
+        // Camera & Controls
+        let cameraMode = 0; // 0: Chase, 1: Hood, 2: Orbit
+        let keys = { forward: false, backward: false, left: false, right: false, brake: false };
+
+        // Audio System (Synthesized Engine Sound via Web Audio API)
+        let audioCtx = null;
+        let engineOsc = null;
+        let engineGain = null;
+        let audioEnabled = false;
+
+        // Initialize on load
+        window.onload = function() {
+            initEngine();
+            loadEnvironment('gridmap');
+            createVehicle();
+            setupInputs();
+            animate();
+            showNotification("Welcome to BeamNG.drive Web! Use WASD to drive.");
+        };
+
+        // --- Menu Toggle Helper ---
+        function toggleMenu(menuId) {
+            const menus = ['vehicleMenu', 'mapMenu', 'spawnMenu', 'helpMenu'];
+            menus.forEach(id => {
+                const el = document.getElementById(id);
+                if (id === menuId) {
+                    el.classList.toggle('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+
+        // --- Core Three.js & Cannon.js Physics Engine ---
+        function initEngine() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x06080d);
+            scene.fog = new THREE.FogExp2(0x06080d, 0.01);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 1000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Physics World
+            world = new CANNON.World();
+            world.gravity.set(0, -9.82, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 12;
+
+            // Physics Materials
+            physicsMaterials.ground = new CANNON.Material('groundMaterial');
+            physicsMaterials.car = new CANNON.Material('carMaterial');
+            physicsMaterials.wheel = new CANNON.Material('wheelMaterial');
+            physicsMaterials.prop = new CANNON.Material('propMaterial');
+
+            world.addContactMaterial(new CANNON.ContactMaterial(physicsMaterials.wheel, physicsMaterials.ground, {
+                friction: 0.9,
+                restitution: 0.05,
+            }));
+            world.addContactMaterial(new CANNON.ContactMaterial(physicsMaterials.car, physicsMaterials.ground, {
+                friction: 0.3,
+                restitution: 0.2,
+            }));
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            sunLight.position.set(60, 120, 60);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 400;
+            const d = 100;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // --- Environments / Maps ---
+        let currentEnvGroup = new THREE.Group();
+        scene.add(currentEnvGroup);
+
+        function loadEnvironment(envName) {
+            // Clear previous obstacles
+            while(currentEnvGroup.children.length > 0){ 
+                currentEnvGroup.remove(currentEnvGroup.children[0]); 
+            }
+
+            // Remove existing static bodies from cannon world
+            world.bodies.forEach(b => {
+                if(b.mass === 0 && b !== vehicle?.chassisBody) {
+                    world.remove(b);
+                }
+            });
+
+            // Ground Plane Physics
+            const groundShape = new CANNON.Plane();
+            const groundBody = new CANNON.Body({ mass: 0, material: physicsMaterials.ground });
+            groundBody.addShape(groundShape);
+            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+            world.addBody(groundBody);
+
+            // Ground Visual
+            const groundGeo = new THREE.PlaneGeometry(800, 800, 80, 80);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: envName === 'gridmap' ? 0x141b2d : 0x1c2438,
+                roughness: 0.85,
+                metalness: 0.15
+            });
+            const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.receiveShadow = true;
+            currentEnvGroup.add(groundMesh);
+
+            const gridHelper = new THREE.GridHelper(800, 80, 0xf97316, 0x1e293b);
+            gridHelper.position.y = 0.05;
+            currentEnvGroup.add(gridHelper);
+
+            if (envName === 'gridmap') {
+                // Build Test Arena with ramps & crash walls
+                createObstacleBox(new THREE.Vector3(0, 0, -40), new THREE.Vector3(12, 1, 20), 0.35, 0x334155); // Stunt Ramp
+                createObstacleBox(new THREE.Vector3(0, 2, -75), new THREE.Vector3(16, 4, 2), 0, 0x64748b); // Crash Wall
+                createObstacleBox(new THREE.Vector3(-25, 1, -55), new THREE.Vector3(2, 2, 15), 0, 0x475569); // Side Barrier
+                createObstacleBox(new THREE.Vector3(25, 1, -55), new THREE.Vector3(2, 2, 15), 0, 0x475569);
+            } else if (envName === 'stuntpark') {
+                createObstacleBox(new THREE.Vector3(0, 0, -35), new THREE.Vector3(14, 2, 25), 0.45, 0x3b82f6); // Mega Ramp
+                createObstacleBox(new THREE.Vector3(0, 6, -85), new THREE.Vector3(18, 6, 2), 0, 0xef4444); // Concrete Wall
+                createObstacleBox(new THREE.Vector3(0, 0, -120), new THREE.Vector3(16, 3, 30), -0.35, 0x10b981); // Down ramp
+            }
+
+            showNotification("Loaded Environment: " + (envName === 'gridmap' ? 'Gridmap Test Arena' : 'Mega Stunt Park'));
+            toggleMenu('');
+            resetCar();
+        }
+
+        function createObstacleBox(pos, size, rotX, colorHex) {
+            const shape = new CANNON.Box(new CANNON.Vec3(size.x/2, size.y/2, size.z/2));
+            const body = new CANNON.Body({ mass: 0, material: physicsMaterials.ground });
+            body.addShape(shape);
+            body.position.copy(pos);
+            if(rotX !== 0) body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), rotX);
+            world.addBody(body);
+
+            const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
+            const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            mesh.quaternion.copy(body.quaternion);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            currentEnvGroup.add(mesh);
+        }
+
+        // --- Vehicle Creation & Customization ---
+        function createVehicle() {
+            if (vehicle) {
+                // Remove existing vehicle from world
+                vehicle.removeFromWorld(world);
+                scene.remove(carMeshGroup);
+                wheelMeshes.forEach(wm => scene.remove(wm));
+                wheelMeshes = [];
+                world.remove(chassisBody);
+            }
+
+            let chassisDim, wheelRadius, axleWidth, axleFront, axleBack;
+
+            if (currentCarType === 'coupe') {
+                chassisDim = new CANNON.Vec3(1.9, 0.7, 4.4);
+                wheelRadius = 0.42;
+                axleWidth = 0.95;
+                axleFront = 1.35;
+                axleBack = -1.35;
+            } else if (currentCarType === 'truck') {
+                chassisDim = new CANNON.Vec3(2.1, 1.0, 5.2);
+                wheelRadius = 0.55;
+                axleWidth = 1.05;
+                axleFront = 1.6;
+                axleBack = -1.6;
+            } else if (currentCarType === 'hatch') {
+                chassisDim = new CANNON.Vec3(1.8, 0.65, 3.9);
+                wheelRadius = 0.38;
+                axleWidth = 0.9;
+                axleFront = 1.2;
+                axleBack = -1.2;
+            }
+
+            chassisBody = new CANNON.Body({
+                mass: currentCarType === 'truck' ? 2200 : 1400,
+                material: physicsMaterials.car
+            });
+            const chassisShape = new CANNON.Box(chassisDim);
+            chassisBody.addShape(chassisShape, new CANNON.Vec3(0, 0.2, 0));
+            chassisBody.position.set(0, 3, 0);
+            world.addBody(chassisBody);
+
+            vehicle = new CANNON.RaycastVehicle({
+                chassisBody: chassisBody,
+            });
+
+            const wheelOptions = {
+                radius: wheelRadius,
+                directionLocal: new CANNON.Vec3(0, -1, 0),
+                suspensionStiffness: currentCarType === 'truck' ? 50 : 35,
+                suspensionRestLength: 0.4,
+                frictionSlip: 4.0,
+                dampingRelaxation: 2.5,
+                dampingCompression: 4.5,
+                maxSuspensionForce: 150000,
+                maxSuspensionTravel: 0.45,
+                customSlidingRotationalSpeed: -30,
+                useCustomSlidingRotationalSpeed: true
+            };
+
+            vehicle.addWheel({ ...wheelOptions, connectionPointLocal: new CANNON.Vec3(-axleWidth, 0.1, axleFront), isFrontWheel: true });
+            vehicle.addWheel({ ...wheelOptions, connectionPointLocal: new CANNON.Vec3(axleWidth, 0.1, axleFront), isFrontWheel: true });
+            vehicle.addWheel({ ...wheelOptions, connectionPointLocal: new CANNON.Vec3(-axleWidth, 0.1, axleBack), isFrontWheel: false });
+            vehicle.addWheel({ ...wheelOptions, connectionPointLocal: new CANNON.Vec3(axleWidth, 0.1, axleBack), isFrontWheel: false });
+
+            vehicle.addToWorld(world);
+
+            // Three.js Car Model
+            carMeshGroup = new THREE.Group();
+            bodyDeformableParts = [];
+
+            const bodyGeo = new THREE.BoxGeometry(chassisDim.x, chassisDim.y, chassisDim.z, 10, 5, 14);
+            const posAttr = bodyGeo.attributes.position;
+            const initialPositions = [];
+            for (let i = 0; i < posAttr.count; i++) {
+                initialPositions.push(new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)));
+            }
+            bodyDeformableParts.push({ geometry: bodyGeo, initialPositions: initialPositions });
+
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: currentCarColor,
+                metalness: 0.75,
+                roughness: 0.2,
+                flatShading: true
+            });
+            const carBodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+            carBodyMesh.position.set(0, 0.3, 0);
+            carBodyMesh.castShadow = true;
+            carBodyMesh.receiveShadow = true;
+            carMeshGroup.add(carBodyMesh);
+
+            // Cabin Roof
+            const roofGeo = new THREE.BoxGeometry(chassisDim.x * 0.85, 0.5, chassisDim.z * 0.5);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.9, roughness: 0.1 });
+            const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+            roofMesh.position.set(0, chassisDim.y/2 + 0.35, -0.1);
+            roofMesh.castShadow = true;
+            carMeshGroup.add(roofMesh);
+
+            scene.add(carMeshGroup);
+
+            // Wheels Visual
+            wheelMeshes = [];
+            for (let i = 0; i < 4; i++) {
+                const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.3, 16);
+                const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
+                const wheelMesh = new THREE.Mesh(wheelGeo, wheelMat);
+                wheelMesh.castShadow = true;
+                scene.add(wheelMesh);
+                wheelMeshes.push(wheelMesh);
+            }
+        }
+
+        function changeCarModel(modelName) {
+            currentCarType = modelName;
+            createVehicle();
+            showNotification("Switched Vehicle Model!");
+        }
+
+        function setCarColor(colorHex) {
+            currentCarColor = colorHex;
+            if (carMeshGroup && carMeshGroup.children[0]) {
+                carMeshGroup.children[0].material.color.setHex(colorHex);
+            }
+            showNotification("Updated Vehicle Paint Color!");
+        }
+
+        function updateEnginePower(val) {
+            maxEnginePower = parseInt(val);
+            showNotification("Engine Power set to " + maxEnginePower + " HP");
+        }
+
+        // --- Sandbox Prop Spawner ---
+        function spawnObject(type) {
+            const spawnPos = new CANNON.Vec3(
+                chassisBody.position.x + Math.sin(chassisBody.quaternion.y) * 15,
+                4,
+                chassisBody.position.z + Math.cos(chassisBody.quaternion.y) * 15
+            );
+
+            if (type === 'barrier') {
+                const size = new CANNON.Vec3(2.5, 1.2, 1);
+                const shape = new CANNON.Box(size);
+                const body = new CANNON.Body({ mass: 60, material: physicsMaterials.prop });
+                body.addShape(shape);
+                body.position.copy(spawnPos);
+                world.addBody(body);
+
+                const geo = new THREE.BoxGeometry(size.x*2, size.y*2, size.z*2);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+                spawnables.push({ body, mesh });
+                showNotification("Spawned Concrete Wall!");
+            } else if (type === 'ramp') {
+                createObstacleBox(new CANNON.Vector3(spawnPos.x, 0, spawnPos.z), new THREE.Vector3(6, 2, 8), 0.4, 0xf97316);
+                showNotification("Spawned Stunt Ramp!");
+            } else if (type === 'sphere') {
+                const radius = 1.6;
+                const shape = new CANNON.Sphere(radius);
+                const body = new CANNON.Body({ mass: 90, material: physicsMaterials.prop });
+                body.addShape(shape);
+                body.position.copy(spawnPos);
+                world.addBody(body);
+
+                const geo = new THREE.SphereGeometry(radius, 16, 16);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.2, metalness: 0.5 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+                spawnables.push({ body, mesh });
+                showNotification("Spawned Giant Ball!");
+            } else if (type === 'barrel') {
+                const radius = 0.6, height = 1.2;
+                const shape = new CANNON.Cylinder(radius, radius, height, 12);
+                const body = new CANNON.Body({ mass: 30, material: physicsMaterials.prop });
+                const q = new CANNON.Quaternion();
+                q.setFromAxisAngle(new CANNON.Vec3(1,0,0), Math.PI/2);
+                body.addShape(shape, new CANNON.Vec3(), q);
+                body.position.copy(spawnPos);
+                world.addBody(body);
+
+                const geo = new THREE.CylinderGeometry(radius, radius, height, 12);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.4 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+                spawnables.push({ body, mesh });
+                showNotification("Spawned Steel Barrel!");
+            }
+            toggleMenu('');
+        }
+
+        function clearProps() {
+            spawnables.forEach(item => {
+                world.remove(item.body);
+                scene.remove(item.mesh);
+            });
+            spawnables = [];
+            showNotification("Cleared All Props!");
+            toggleMenu('');
+        }
+
+        // --- Controls & Inputs ---
+        function setupInputs() {
+            window.addEventListener('keydown', (e) => handleKey(e.code, true));
+            window.addEventListener('keyup', (e) => handleKey(e.code, false));
+        }
+
+        function handleKey(code, isDown) {
+            switch (code) {
+                case 'KeyW':
+                case 'ArrowUp': keys.forward = isDown; break;
+                case 'KeyS':
+                case 'ArrowDown': keys.backward = isDown; break;
+                case 'KeyA':
+                case 'ArrowLeft': keys.left = isDown; break;
+                case 'KeyD':
+                case 'ArrowRight': keys.right = isDown; break;
+                case 'Space': keys.brake = isDown; break;
+                case 'KeyR': if (isDown) resetCar(); break;
+                case 'KeyC':
+                    if (isDown) {
+                        cameraMode = (cameraMode + 1) % 3;
+                        const modes = ["Chase Cam", "Hood Cam", "Orbit Cam"];
+                        showNotification("Camera Mode: " + modes[cameraMode]);
+                    }
+                    break;
+            }
+        }
+
+        function resetCar() {
+            chassisBody.position.set(0, 3, 0);
+            chassisBody.velocity.set(0, 0, 0);
+            chassisBody.angularVelocity.set(0, 0, 0);
+            chassisBody.quaternion.setFromAxisAngle(new THREE.Vec3(0, 1, 0), 0);
+            accumulatedImpact = 0;
+            totalDamage = 0;
+
+            // Restore car mesh vertices
+            bodyDeformableParts.forEach(part => {
+                const posAttr = part.geometry.attributes.position;
+                for (let i = 0; i < posAttr.count; i++) {
+                    posAttr.setXYZ(i, part.initialPositions[i].x, part.initialPositions[i].y, part.initialPositions[i].z);
+                }
+                posAttr.needsUpdate = true;
+                part.geometry.computeVertexNormals();
+            });
+
+            showNotification("Vehicle Reset!");
+        }
+
+        // --- Soft-Body Crash Deformation ---
+        function updateSoftBodyDeformation() {
+            const currentVel = chassisBody.velocity;
+            const deltaVel = new CANNON.Vec3(currentVel.x - lastVelocity.x, currentVel.y - lastVelocity.y, currentVel.z - lastVelocity.z);
+            const impactForce = deltaVel.length();
+            lastVelocity.copy(currentVel);
+
+            if (impactForce > 4.2) {
+                accumulatedImpact += impactForce;
+                totalDamage = Math.min(100, Math.floor(accumulatedImpact * 1.6));
+
+                bodyDeformableParts.forEach(part => {
+                    const posAttr = part.geometry.attributes.position;
+                    for (let i = 0; i < posAttr.count; i++) {
+                        let vx = posAttr.getX(i);
+                        let vy = posAttr.getY(i);
+                        let vz = posAttr.getZ(i);
+
+                        if (vz > 0.8 && Math.random() < 0.45) {
+                            posAttr.setXYZ(
+                                vx,
+                                vx + (Math.random() - 0.5) * impactForce * 0.08,
+                                vy + (Math.random() - 0.5) * impactForce * 0.08,
+                                vz - impactForce * 0.14
+                            );
+                        }
+                    }
+                    posAttr.needsUpdate = true;
+                    part.geometry.computeVertexNormals();
+                });
+            }
+        }
+
+        // --- Web Audio Synthesizer Engine ---
+        let audioEnabled = false;
+        let audioCtx = null;
+        let engineOsc = null;
+        let engineGain = null;
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const icon = document.getElementById('audio-icon');
+            if (audioEnabled) {
+                icon.className = "fa-solid fa-volume-high text-orange-400";
+                initAudioContext();
+                showNotification("Engine Audio Enabled");
+            } else {
+                icon.className = "fa-solid fa-volume-xmark text-gray-500";
+                if (audioCtx) audioCtx.suspend();
+                showNotification("Engine Audio Muted");
+            }
+        }
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                engineOsc = audioCtx.createOscillator();
+                engineOsc.type = 'sawtooth';
+                engineOsc.frequency.setValueAtTime(60, audioCtx.currentTime);
+
+                engineGain = audioCtx.createGain();
+                engineGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+
+                engineOsc.connect(engineGain);
+                engineGain.connect(audioCtx.destination);
+                engineOsc.start();
+            } else {
+                audioCtx.resume();
+            }
+        }
+
+        function updateEngineSound(speedKmh, throttle) {
+            if (!audioEnabled || !audioCtx || !engineOsc) return;
+            const targetFreq = 50 + (Math.abs(speedKmh) * 1.8) + (throttle * 80);
+            engineOsc.frequency.setTargetAtTime(Math.min(targetFreq, 450), audioCtx.currentTime, 0.1);
+        }
+
+        // --- UI Toast Helper ---
+        let notifTimeout = null;
+        function showNotification(text) {
+            const box = document.getElementById('notification-box');
+            box.innerText = text;
+            box.style.opacity = '1';
+            clearTimeout(notifTimeout);
+            notifTimeout = setTimeout(() => {
+                box.style.opacity = '0';
+            }, 3000);
+        }
+
+        function onWindowResize() {
+<!-- ... existing code ... %>
